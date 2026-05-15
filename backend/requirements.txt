@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+scikit-learn
+pandas
+pydantic
+httpx
+beautifulsoup4
+pillow
+pytesseract
+python-multipart

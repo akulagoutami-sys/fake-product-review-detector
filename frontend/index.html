@@ -1,0 +1,161 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Review Analyzer</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="background">
+    <div class="particle particle-1"></div>
+    <div class="particle particle-2"></div>
+    <div class="particle particle-3"></div>
+    <div class="particle particle-4"></div>
+    <div class="particle particle-5"></div>
+    <div class="particle particle-6"></div>
+    <div class="particle particle-7"></div>
+    <div class="particle particle-8"></div>
+  </div>
+
+  <main class="container">
+    <header class="header">
+      <div class="hero">
+        <div class="hero-content">
+          <div class="hero-icon">
+            <i class="fas fa-robot"></i>
+          </div>
+          <div class="hero-copy">
+            <h1>AI Review Analyzer</h1>
+            <p class="subtitle">PROFESSIONAL REVIEW AUTHENTICITY DETECTION WITH OCR AND LINK ANALYSIS</p>
+            <div class="subtitle-glow"></div>
+          </div>
+        </div>
+        <div class="hero-flares">
+          <span class="sparkle sparkle-1"></span>
+          <span class="sparkle sparkle-2"></span>
+          <span class="sparkle sparkle-3"></span>
+          <span class="sparkle sparkle-4"></span>
+          <span class="neon-streak"></span>
+        </div>
+      </div>
+    </header>
+
+    <section class="dashboard">
+      <div class="panel panel-left">
+        <div class="card control-card">
+          <div class="card-title">
+            <i class="fas fa-magnifying-glass"></i>
+            <span>Review Analyzer</span>
+          </div>
+
+          <div class="tabs">
+            <button class="tab-button active" data-mode="text">Text Review</button>
+            <button class="tab-button" data-mode="link">Product Link</button>
+            <button class="tab-button" data-mode="screenshot">Screenshot OCR</button>
+          </div>
+
+          <div class="tab-panels">
+            <div class="tab-panel active" id="textPanel">
+              <label for="reviewInput">Review Text</label>
+              <textarea id="reviewInput" placeholder="Paste a customer review here..."></textarea>
+              <p class="hint">Analyze one review at a time with a confidence score.</p>
+            </div>
+
+            <div class="tab-panel" id="linkPanel">
+              <label for="linkInput">Product URL</label>
+              <input id="linkInput" type="url" placeholder="Paste a product review link" />
+              <p class="hint">Scrapes reviews from the link and evaluates their authenticity.</p>
+            </div>
+
+            <div class="tab-panel" id="screenshotPanel">
+              <label for="fileInput">Screenshot Upload</label>
+              <div class="file-input-wrapper">
+                <input id="fileInput" type="file" accept="image/*" />
+                <span id="fileLabel">Choose screenshot image</span>
+              </div>
+              <p class="hint">OCR reads the text from your screenshot for analysis.</p>
+            </div>
+          </div>
+
+          <button id="analyzeButton">
+            <span class="button-text"><i class="fas fa-play"></i> Analyze</span>
+            <div class="spinner hidden"><div class="spinner-inner"></div></div>
+          </button>
+        </div>
+      </div>
+
+      <div class="panel panel-right">
+        <div class="card result-card hidden" id="resultCard">
+          <div class="card-title">
+            <i class="fas fa-chart-line"></i>
+            <span>Analysis Result</span>
+          </div>
+
+          <div class="result-grid">
+            <div class="result-metric">
+              <span>Prediction</span>
+              <strong id="predictionStatus">Ready</strong>
+            </div>
+            <div class="result-metric">
+              <span>Confidence</span>
+              <strong id="confidenceTextLarge">0%</strong>
+            </div>
+            <div class="result-metric">
+              <span>Trust Score</span>
+              <strong id="trustScoreText">0%</strong>
+            </div>
+            <div class="result-metric">
+              <span>Reviews Analyzed</span>
+              <strong id="reviewCountText">0</strong>
+            </div>
+          </div>
+
+          <div class="result-detail">
+            <span class="detail-label">Analyzed input</span>
+            <p id="analysisTextDisplay" class="detail-text">Paste text, a product link, or upload a screenshot to begin.</p>
+          </div>
+
+          <div class="mini-chart-card">
+            <div class="mini-chart-title">Review distribution</div>
+            <canvas id="reviewChart" aria-label="Fake vs genuine review chart"></canvas>
+          </div>
+
+          <div class="sample-reviews">
+            <h3>Sample predictions</h3>
+            <div id="reviewSamplesList" class="review-samples-list"></div>
+          </div>
+        </div>
+
+        <div class="card error-card hidden" id="errorCard">
+          <div class="card-title error">
+            <i class="fas fa-exclamation-circle"></i>
+            <span>Error</span>
+          </div>
+          <div class="card-content">
+            <p id="errorMessage"></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p>Backend: <code>backend/app.py</code> · Frontend: <code>frontend/index.html</code></p>
+    </footer>
+  </main>
+
+  <div class="loading-overlay hidden" id="loadingOverlay">
+    <div class="loader-shell">
+      <div class="loader-ring"></div>
+      <div class="loader-text">
+        <strong>Analyzing review signal</strong>
+        <span>Waiting for the AI engine to finish evaluation...</span>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
