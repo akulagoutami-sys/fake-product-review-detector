@@ -6,7 +6,6 @@ const analyzeButton = document.getElementById('analyzeButton');
 const buttonText = document.querySelector('.button-text');
 const spinner = document.querySelector('.spinner');
 const reviewInput = document.getElementById('reviewInput');
-const linkInput = document.getElementById('linkInput');
 const fileInput = document.getElementById('fileInput');
 const fileLabel = document.getElementById('fileLabel');
 const resultCard = document.getElementById('resultCard');
@@ -107,11 +106,7 @@ function renderSampleReviews(sampleReviews = []) {
 }
 
 function getModeLabel() {
-  return activeMode === 'text'
-    ? 'Text Review'
-    : activeMode === 'link'
-      ? 'Product Link'
-      : 'Screenshot OCR';
+  return activeMode === 'text' ? 'Text Review' : 'Screenshot OCR';
 }
 
 async function fetchJson(endpoint, options) {
@@ -146,10 +141,6 @@ async function analyzeActiveMode() {
     const text = reviewInput.value.trim();
     if (!text) throw new Error('Please paste a review text before analyzing.');
     payload.review = text;
-  } else if (activeMode === 'link') {
-    const url = linkInput.value.trim();
-    if (!url) throw new Error('Please paste a product link before analyzing.');
-    payload.url = url;
   } else if (activeMode === 'screenshot') {
     const file = fileInput.files[0];
     if (!file) throw new Error('Please upload a screenshot image before analyzing.');
@@ -224,7 +215,7 @@ function resetResult() {
   reviewCountText.textContent = '0';
   trustScoreText.textContent = '0%';
   reviewSamplesList.innerHTML = '<p class="hint">Analysis summary and samples will appear here.</p>';
-  analysisTextDisplay.textContent = 'Paste text, a product link, or upload a screenshot to begin.';
+  analysisTextDisplay.textContent = 'Paste text or upload a screenshot to begin.';
   updateChart(0, 100);
 }
 

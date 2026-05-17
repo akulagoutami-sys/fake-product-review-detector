@@ -29,7 +29,7 @@
           </div>
           <div class="hero-copy">
             <h1>AI Review Analyzer</h1>
-            <p class="subtitle">PROFESSIONAL REVIEW AUTHENTICITY DETECTION WITH OCR AND LINK ANALYSIS</p>
+            <p class="subtitle">PROFESSIONAL REVIEW AUTHENTICITY DETECTION WITH OCR</p>
             <div class="subtitle-glow"></div>
           </div>
         </div>
@@ -53,7 +53,6 @@
 
           <div class="tabs">
             <button class="tab-button active" data-mode="text">Text Review</button>
-            <button class="tab-button" data-mode="link">Product Link</button>
             <button class="tab-button" data-mode="screenshot">Screenshot OCR</button>
           </div>
 
@@ -62,12 +61,6 @@
               <label for="reviewInput">Review Text</label>
               <textarea id="reviewInput" placeholder="Paste a customer review here..."></textarea>
               <p class="hint">Analyze one review at a time with a confidence score.</p>
-            </div>
-
-            <div class="tab-panel" id="linkPanel">
-              <label for="linkInput">Product URL</label>
-              <input id="linkInput" type="url" placeholder="Paste a product review link" />
-              <p class="hint">Scrapes reviews from the link and evaluates their authenticity.</p>
             </div>
 
             <div class="tab-panel" id="screenshotPanel">
@@ -115,7 +108,7 @@
 
           <div class="result-detail">
             <span class="detail-label">Analyzed input</span>
-            <p id="analysisTextDisplay" class="detail-text">Paste text, a product link, or upload a screenshot to begin.</p>
+            <p id="analysisTextDisplay" class="detail-text">Paste text or upload a screenshot to begin.</p>
           </div>
 
           <div class="mini-chart-card">
