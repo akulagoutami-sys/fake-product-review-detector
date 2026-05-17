@@ -1,10 +1,16 @@
+import re
 from base64 import b64decode
 from io import BytesIO
 from pathlib import Path
-import pickle
 from typing import Dict, List, Optional, Tuple
 
-import pytesseract
+import joblib
+
+try:
+    import pytesseract
+except ImportError:  # pragma: no cover
+    pytesseract = None
+
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -13,7 +19,30 @@ from sklearn.pipeline import Pipeline
 
 
 MODEL_PATH = Path(__file__).resolve().parent / "model.pkl"
+ROOT_MODEL_PATH = Path(__file__).resolve().parent.parent / "model.pkl"
 MAX_REVIEW_SAMPLES = 15
+SPAMMY_PATTERNS = [
+    r"!{2,}",
+    r"best product ever",
+    r"must buy",
+    r"highly recommend",
+    r"life changing",
+    r"you need this",
+    r"order now",
+    r"buy now",
+    r"unrealistic",
+    r"limited time",
+    r"special offer",
+    r"amazing deal",
+    r"don't miss",
+    r"best.*ever",
+    r"love (it|this|them)",
+    r"perfect(ly)?",
+    r"5 stars?",
+    r"10/10",
+    r"so good",
+    r"too good to be true",
+]
 
 
 class TextRequest(BaseModel):
@@ -43,6 +72,14 @@ app.add_middleware(
 )
 
 
+def find_model_path() -> Path:
+    if MODEL_PATH.exists():
+        return MODEL_PATH
+    if ROOT_MODEL_PATH.exists():
+        return ROOT_MODEL_PATH
+    return MODEL_PATH
+
+
 def load_saved_model(model_path: Path) -> Tuple[Pipeline, float]:
     """Load the trained model pipeline and saved score from disk."""
     if not model_path.exists():
@@ -50,14 +87,26 @@ def load_saved_model(model_path: Path) -> Tuple[Pipeline, float]:
             f"Model file not found at {model_path}. Run backend/train.py first to train and save the model."
         )
 
-    with model_path.open("rb") as file:
-        model_data = pickle.load(file)
+    try:
+        model_data = joblib.load(model_path)
+    except Exception:
+        # Fallback to pickle for backward compatibility
+        import pickle
+        with model_path.open("rb") as file:
+            model_data = pickle.load(file)
 
-    return model_data["pipeline"], float(model_data.get("score", 0.0))
+    score = float(model_data.get("test_score", model_data.get("score", 0.0)))
+    return model_data["pipeline"], score
 
 
 def extract_reviews_from_image(file_bytes: bytes) -> List[str]:
     """Use OCR to extract review text from an uploaded screenshot image."""
+    if pytesseract is None:
+        raise RuntimeError(
+            "OCR support is not available because pytesseract is not installed. "
+            "Install pytesseract and Tesseract OCR to enable screenshot analysis."
+        )
+
     image = Image.open(BytesIO(file_bytes))
     raw_text = pytesseract.image_to_string(image, lang="eng")
     lines = [line.strip() for line in raw_text.splitlines() if len(line.strip()) > 30]
@@ -80,22 +129,66 @@ def decode_base64_image(image_base64: str) -> bytes:
         raise ValueError(f"Invalid image data: {exc}")
 
 
-def predict_text(model: Pipeline, text: str) -> Tuple[str, float]:
+def clean_text(text: str) -> str:
+    text = str(text or "").strip()
+    text = re.sub(r"\s+", " ", text)
+    return text
+
+
+def score_spammy_patterns(text: str) -> Dict[str, object]:
+    score = 0
+    matches = []
+    normalized = text.lower()
+
+    for pattern in SPAMMY_PATTERNS:
+        if re.search(pattern, normalized):
+            score += 1
+            matches.append(pattern)
+
+    repeated_phrases = len(re.findall(r"(love|great|best|perfect|amazing|recommend)\b", normalized))
+    if repeated_phrases >= 3:
+        score += 1
+        matches.append("repeated praise")
+
+    return {"spam_score": score, "patterns": sorted(set(matches))}
+
+
+def adjust_prediction(prediction: str, confidence: float, text: str) -> Tuple[str, float, Dict[str, object]]:
+    details = score_spammy_patterns(text)
+    if details["spam_score"] >= 2 and prediction == "genuine":
+        return "fake", max(confidence, 85.0), details
+    return prediction, confidence, details
+
+
+def normalize_prediction(raw_prediction: object) -> str:
+    value = str(raw_prediction).strip().lower()
+    if value in {"fake", "genuine"}:
+        return value
+    if value == "cg":
+        return "genuine"
+    if value == "or":
+        return "fake"
+    return "genuine" if "g" in value else "fake"
+
+
+def predict_text(model: Pipeline, text: str) -> Tuple[str, float, Dict[str, object]]:
     """Predict whether the provided review text is genuine or fake."""
-    prediction = model.predict([text])[0]
-    probabilities = model.predict_proba([text])[0]
+    cleaned = clean_text(text)
+    raw_prediction = model.predict([cleaned])[0]
+    probabilities = model.predict_proba([cleaned])[0]
+    normalized_prediction = normalize_prediction(raw_prediction)
     confidence = round(float(max(probabilities)) * 100.0, 2)
-    return prediction, confidence
+    return adjust_prediction(normalized_prediction, confidence, cleaned)
 
 
-def summarize_results(results: List[Tuple[str, float]]) -> Dict[str, object]:
+def summarize_results(results: List[Tuple[str, float, Dict[str, object]]]) -> Dict[str, object]:
     """Summarize model predictions into fake percentage and trust score."""
     total_reviews = len(results)
     if total_reviews == 0:
         return {"review_count": 0, "fake_percentage": 0.0, "trust_score": 0.0, "average_confidence": 0.0}
-    fake_count = sum(1 for prediction, _ in results if prediction == "fake")
+    fake_count = sum(1 for prediction, _, _ in results if prediction == "fake")
+    average_confidence = round(sum(confidence for _, confidence, _ in results) / total_reviews, 2)
     fake_percentage = round((fake_count / total_reviews) * 100.0, 2)
-    average_confidence = round(sum(confidence for _, confidence in results) / total_reviews, 2)
     trust_score = round(((100.0 - fake_percentage) * (average_confidence / 100.0)), 2)
 
     return {
@@ -108,7 +201,7 @@ def summarize_results(results: List[Tuple[str, float]]) -> Dict[str, object]:
 
 @app.on_event("startup")
 async def startup_event() -> None:
-    model, score = load_saved_model(MODEL_PATH)
+    model, score = load_saved_model(find_model_path())
     app.state.model = model
     app.state.training_score = round(score * 100.0, 2)
 
@@ -128,7 +221,7 @@ async def analyze_text(request: TextRequest) -> Dict[str, object]:
         raise HTTPException(status_code=400, detail="Please provide non-empty review text.")
 
     model: Pipeline = app.state.model
-    prediction, confidence = predict_text(model, text)
+    prediction, confidence, pattern_details = predict_text(model, text)
     fake_percentage = 100.0 if prediction == "fake" else 0.0
     trust_score = round(confidence if prediction == "genuine" else 100.0 - confidence, 2)
 
@@ -140,8 +233,10 @@ async def analyze_text(request: TextRequest) -> Dict[str, object]:
         "trust_score": trust_score,
         "training_score": app.state.training_score,
         "review_count": 1,
+        "review_text": text,
+        "pattern_insights": pattern_details,
         "sample_reviews": [
-            {"text": text, "prediction": prediction, "confidence": confidence}
+            {"text": text, "prediction": prediction, "confidence": confidence, "patterns": pattern_details}
         ],
     }
 
@@ -173,8 +268,14 @@ async def analyze_screenshot(file: UploadFile = File(...)) -> Dict[str, object]:
         "confidence": summary["average_confidence"],
         "training_score": app.state.training_score,
         "review_count": summary["review_count"],
+        "extracted_text": "\n\n".join(reviews),
         "sample_reviews": [
-            {"text": reviews[i], "prediction": results[i][0], "confidence": results[i][1]}
+            {
+                "text": reviews[i],
+                "prediction": results[i][0],
+                "confidence": results[i][1],
+                "patterns": results[i][2],
+            }
             for i in range(min(len(reviews), 5))
         ],
     }
@@ -190,7 +291,7 @@ async def predict(request: PredictRequest) -> Dict[str, object]:
         if not review:
             raise HTTPException(status_code=400, detail="Please provide review text for analysis.")
 
-        prediction, confidence = predict_text(model, review)
+        prediction, confidence, pattern_details = predict_text(model, review)
         return {
             "analysis_type": "Text Review",
             "prediction": prediction,
@@ -199,8 +300,11 @@ async def predict(request: PredictRequest) -> Dict[str, object]:
             "trust_score": round(confidence if prediction == "genuine" else 100.0 - confidence, 2),
             "training_score": app.state.training_score,
             "review_count": 1,
-            "sample_reviews": [{"text": review, "prediction": prediction, "confidence": confidence}],
             "review_text": review,
+            "pattern_insights": pattern_details,
+            "sample_reviews": [
+                {"text": review, "prediction": prediction, "confidence": confidence, "patterns": pattern_details}
+            ],
         }
 
     if mode == "screenshot":
@@ -231,8 +335,14 @@ async def predict(request: PredictRequest) -> Dict[str, object]:
             "confidence": summary["average_confidence"],
             "training_score": app.state.training_score,
             "review_count": summary["review_count"],
+            "extracted_text": "\n\n".join(reviews),
             "sample_reviews": [
-                {"text": reviews[i], "prediction": results[i][0], "confidence": results[i][1]}
+                {
+                    "text": reviews[i],
+                    "prediction": results[i][0],
+                    "confidence": results[i][1],
+                    "patterns": results[i][2],
+                }
                 for i in range(min(len(reviews), 5))
             ],
         }
